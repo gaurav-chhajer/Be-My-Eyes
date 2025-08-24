@@ -38,7 +38,7 @@ This is a client-side only application and does not require a backend or build s
 
 1.  **Clone the repository:**
     ```sh
-    git clone [https://github.com/YOUR_USERNAME/YOUR_REPOSITORY_NAME.git](https://github.com/YOUR_USERNAME/YOUR_REPOSITORY_NAME.git)
+    git clone https://github.com/gaurav-chhajer/Be-My-Eyes.git
     ```
 
 2.  **Get a Gemini API Key:**
@@ -54,7 +54,7 @@ This is a client-side only application and does not require a backend or build s
     - Paste your key between the quotes.
 
 4.  **Run the application:**
-    - Simply open the `index.html` file in your web browser. You may need to grant the page permission to access your camera and microphone.
+    - Simply open the `BeMyEyes.html` file in your web browser. You may need to grant the page permission to access your camera and microphone.
 
 ## Usage
 
