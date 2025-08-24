@@ -1,0 +1,467 @@
+<!-- This is the model with gemini api and buttons to describe the scene, read text and identify objects with voice command -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Vision Assistant</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            touch-action: manipulation; /* Prevents double-tap to zoom on mobile */
+        }
+        .action-button {
+            transition: all 0.2s ease-in-out;
+        }
+        .action-button:active {
+            transform: scale(0.95);
+        }
+        #video-container {
+            position: relative;
+            background-color: #111827; /* gray-900 */
+        }
+        #video {
+            transform: scaleX(-1); /* Mirror the video feed */
+        }
+        #status-overlay, #welcome-overlay {
+            position: absolute;
+            top: 0; left: 0; right: 0; bottom: 0;
+            /* The 'display' property is now handled by Tailwind classes to allow hiding/showing */
+            justify-content: center;
+            align-items: center;
+            background-color: rgba(0, 0, 0, 0.7);
+            color: white;
+            text-align: center;
+            z-index: 10;
+        }
+        .loader {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #6366f1; /* indigo-500 */
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        #voice-status {
+            transition: opacity 0.3s ease-in-out;
+        }
+    </style>
+</head>
+<body class="bg-gray-100 dark:bg-gray-900 text-gray-900 dark:text-gray-100 flex flex-col items-center justify-center min-h-screen p-4">
+
+    <div class="w-full max-w-2xl mx-auto bg-white dark:bg-gray-800 rounded-2xl shadow-2xl overflow-hidden">
+        <header class="p-4 border-b border-gray-200 dark:border-gray-700 flex justify-between items-center">
+            <div>
+                <h1 class="text-2xl font-bold text-indigo-600 dark:text-indigo-400">AI Vision Assistant</h1>
+                <p class="text-sm text-gray-500 dark:text-gray-400">Your third eye on the world</p>
+            </div>
+            <div id="voice-status" class="flex items-center gap-2 opacity-50">
+                <svg class="w-6 h-6" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M7 4a3 3 0 016 0v4a3 3 0 11-6 0V4zm4 10.93A7.001 7.001 0 0017 8h-1a6 6 0 11-12 0H3a7.001 7.001 0 006 6.93V17H7v1h6v-1h-2v-2.07z" clip-rule="evenodd"></path></svg>
+                <span id="voice-status-text" class="text-sm font-medium">Inactive</span>
+            </div>
+        </header>
+
+        <!-- Video Feed and Status -->
+        <div id="video-container" class="w-full aspect-video rounded-lg overflow-hidden">
+            <video id="video" class="w-full h-full object-cover" autoplay playsinline></video>
+            <div id="status-overlay" class="hidden">
+                <div class="flex flex-col items-center gap-4">
+                    <div class="loader"></div>
+                    <p id="status-text" class="text-lg font-medium">Processing...</p>
+                </div>
+            </div>
+             <div id="welcome-overlay" class="flex justify-center items-center">
+                <p class="text-white text-xl font-semibold p-4">Press "Start Camera" to begin</p>
+            </div>
+        </div>
+        <canvas id="canvas" class="hidden"></canvas>
+
+        <!-- Main Controls -->
+        <div class="p-4 grid grid-cols-1 sm:grid-cols-2 gap-3">
+             <button id="toggle-camera" class="action-button w-full bg-indigo-600 text-white font-semibold py-3 px-4 rounded-lg shadow-md hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
+                Start Camera
+            </button>
+            <button id="toggle-voice" class="action-button w-full bg-teal-500 text-white font-semibold py-3 px-4 rounded-lg shadow-md hover:bg-teal-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-teal-500 disabled:bg-gray-400" disabled>
+                Activate Voice
+            </button>
+            <button id="describe-scene" disabled class="action-button bg-blue-500 text-white font-semibold py-3 px-4 rounded-lg shadow-md hover:bg-blue-600 disabled:bg-gray-400 disabled:cursor-not-allowed">
+                Describe Scene
+            </button>
+            <button id="read-text" disabled class="action-button bg-green-500 text-white font-semibold py-3 px-4 rounded-lg shadow-md hover:bg-green-600 disabled:bg-gray-400 disabled:cursor-not-allowed">
+                Read Text
+            </button>
+             <button id="identify-objects" disabled class="action-button bg-purple-500 text-white font-semibold py-3 px-4 rounded-lg shadow-md hover:bg-purple-600 disabled:bg-gray-400 disabled:cursor-not-allowed">
+                Identify Objects
+            </button>
+        </div>
+
+        <!-- Q&A Section -->
+        <div class="p-4 border-t border-gray-200 dark:border-gray-700">
+            <label for="question-input" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Ask a question about what you see:</label>
+            <div class="flex gap-3">
+                <input type="text" id="question-input" placeholder="e.g., What color is this shirt?" class="flex-grow p-3 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-700 focus:ring-indigo-500 focus:border-indigo-500" disabled>
+                <button id="ask-question" disabled class="action-button bg-yellow-500 text-white font-semibold py-3 px-4 rounded-lg shadow-md hover:bg-yellow-600 disabled:bg-gray-400 disabled:cursor-not-allowed">
+                    Ask
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // DOM Elements
+        const video = document.getElementById('video');
+        const canvas = document.getElementById('canvas');
+        const toggleCameraButton = document.getElementById('toggle-camera');
+        const toggleVoiceButton = document.getElementById('toggle-voice');
+        const describeSceneButton = document.getElementById('describe-scene');
+        const readTextButton = document.getElementById('read-text');
+        const identifyObjectsButton = document.getElementById('identify-objects');
+        const questionInput = document.getElementById('question-input');
+        const askQuestionButton = document.getElementById('ask-question');
+        const statusOverlay = document.getElementById('status-overlay');
+        const statusText = document.getElementById('status-text');
+        const welcomeOverlay = document.getElementById('welcome-overlay');
+        const voiceStatus = document.getElementById('voice-status');
+        const voiceStatusText = document.getElementById('voice-status-text');
+
+        // State
+        let stream = null;
+        let isProcessing = false;
+        let isListening = false;
+        let shouldBeListening = false;
+        let voiceMode = 'inactive'; // Can be 'inactive', 'standby', or 'active'
+        
+        // --- Speech Recognition Setup ---
+        const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+        let recognition;
+
+        if (SpeechRecognition) {
+            recognition = new SpeechRecognition();
+            recognition.continuous = true;
+            recognition.lang = 'en-US';
+            recognition.interimResults = false;
+        } else {
+            console.warn("Speech Recognition not supported in this browser.");
+            toggleVoiceButton.disabled = true;
+            toggleVoiceButton.textContent = "Voice Not Supported";
+        }
+
+        // --- Core Functions ---
+
+        async function toggleCamera() {
+            if (stream) {
+                stopCamera();
+            } else {
+                await startCamera();
+            }
+        }
+
+        async function startCamera() {
+            try {
+                stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
+                video.srcObject = stream;
+                video.style.display = 'block';
+                welcomeOverlay.classList.add('hidden');
+                toggleCameraButton.textContent = 'Stop Camera';
+                toggleCameraButton.classList.replace('bg-indigo-600', 'bg-red-600');
+                enableControls(true);
+                toggleVoiceButton.disabled = false;
+                await speak("Camera started.");
+            } catch (error) {
+                console.error("Error starting camera:", error);
+                await speak("Error. Could not start the camera. Please grant permission.");
+            }
+        }
+
+        async function stopCamera() {
+            if (stream) {
+                if (shouldBeListening) {
+                    toggleListening();
+                }
+                stream.getTracks().forEach(track => track.stop());
+                stream = null;
+                video.srcObject = null;
+                video.style.display = 'none';
+                welcomeOverlay.classList.remove('hidden');
+                toggleCameraButton.textContent = 'Start Camera';
+                toggleCameraButton.classList.replace('bg-red-600', 'bg-indigo-600');
+                enableControls(false);
+                toggleVoiceButton.disabled = true;
+                voiceMode = 'inactive';
+                updateVoiceStatus();
+                await speak("Camera stopped.");
+            }
+        }
+        
+        function captureFrame() {
+            if (!stream) return null;
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
+            const context = canvas.getContext('2d');
+            context.translate(canvas.width, 0);
+            context.scale(-1, 1);
+            context.drawImage(video, 0, 0, canvas.width, canvas.height);
+            return canvas.toDataURL('image/jpeg');
+        }
+
+        /**
+         * Speaks text aloud and returns a Promise that resolves when speech is finished.
+         * This allows for interruption and better control flow.
+         * @param {string} text The text to be spoken.
+         * @returns {Promise<void>}
+         */
+        function speak(text) {
+            return new Promise((resolve) => {
+                // Stop any currently speaking utterance
+                window.speechSynthesis.cancel();
+
+                // If no text, resolve immediately
+                if (!text || text.trim() === '') {
+                    resolve();
+                    return;
+                }
+
+                const utterance = new SpeechSynthesisUtterance(text);
+                utterance.lang = 'en-US';
+                
+                // The 'end' event signifies the utterance has finished playing
+                utterance.onend = () => {
+                    resolve();
+                };
+                
+                // The 'error' event also resolves to not block the flow
+                utterance.onerror = (event) => {
+                    console.error("SpeechSynthesis Error:", event);
+                    resolve();
+                };
+                
+                window.speechSynthesis.speak(utterance);
+            });
+        }
+
+        function showLoading(show, text = 'Processing...') {
+            isProcessing = show;
+            statusText.textContent = text;
+            statusOverlay.style.display = show ? 'flex' : 'none';
+            enableControls(!show);
+        }
+
+        function enableControls(enable) {
+            if (!stream) enable = false;
+            describeSceneButton.disabled = !enable || isProcessing;
+            readTextButton.disabled = !enable || isProcessing;
+            identifyObjectsButton.disabled = !enable || isProcessing;
+            questionInput.disabled = !enable || isProcessing;
+            askQuestionButton.disabled = !enable || isProcessing;
+            if (toggleVoiceButton) toggleVoiceButton.disabled = !enable;
+        }
+
+        // --- Voice Command Logic ---
+
+        function toggleListening() {
+            if (!SpeechRecognition) return;
+            shouldBeListening = !shouldBeListening;
+            if (shouldBeListening) {
+                voiceMode = 'standby';
+                try {
+                    recognition.start();
+                    toggleVoiceButton.textContent = "Stop Voice";
+                    toggleVoiceButton.classList.replace('bg-teal-500', 'bg-orange-500');
+                } catch(e) {
+                    console.error("Error starting recognition:", e);
+                    shouldBeListening = false;
+                    voiceMode = 'inactive';
+                }
+            } else {
+                recognition.stop();
+                voiceMode = 'inactive';
+                toggleVoiceButton.textContent = "Activate Voice";
+                toggleVoiceButton.classList.replace('bg-orange-500', 'bg-teal-500');
+            }
+            updateVoiceStatus();
+        }
+        
+        function updateVoiceStatus() {
+            let status = 'Inactive';
+            if (voiceMode === 'standby') status = 'Standby';
+            if (voiceMode === 'active') status = 'Active';
+            if (!isListening && shouldBeListening) status = 'Connecting...';
+            
+            voiceStatusText.textContent = status;
+            voiceStatus.classList.toggle('opacity-50', status === 'Inactive');
+            voiceStatus.classList.toggle('text-yellow-400', status === 'Standby');
+            voiceStatus.classList.toggle('text-green-400', status === 'Active');
+        }
+
+        if (recognition) {
+            recognition.onstart = () => {
+                isListening = true;
+                updateVoiceStatus();
+            };
+
+            recognition.onend = () => {
+                isListening = false;
+                updateVoiceStatus();
+                if (shouldBeListening) {
+                    console.log("Recognition ended, restarting...");
+                    setTimeout(() => {
+                        if (shouldBeListening) {
+                            try { recognition.start(); } catch (e) { console.error("Restart failed:", e); }
+                        }
+                    }, 500);
+                }
+            };
+
+            recognition.onerror = (event) => {
+                console.error("Speech recognition error:", event.error);
+                if (event.error === 'audio-capture') {
+                    speak("I can't access the microphone. Please check permissions.");
+                    shouldBeListening = false;
+                }
+            };
+
+            recognition.onresult = (event) => {
+                const result = event.results[event.results.length - 1];
+                if (result.isFinal) {
+                    const command = result[0].transcript.toLowerCase().trim();
+                    console.log("Final command received:", command);
+                    // Immediately cancel any ongoing speech to allow for barge-in
+                    window.speechSynthesis.cancel();
+                    processVoiceCommand(command);
+                }
+            };
+        }
+
+        async function processVoiceCommand(command) {
+            if (isProcessing) {
+                await speak("Please wait.");
+                return;
+            }
+
+            if (voiceMode === 'standby') {
+                if (command.includes("start")) {
+                    voiceMode = 'active';
+                    updateVoiceStatus();
+                    await speak("Voice commands are now active.");
+                }
+                return; // Ignore other commands in standby
+            }
+
+            if (voiceMode === 'active') {
+                if (command.includes("stop")) {
+                    voiceMode = 'standby';
+                    updateVoiceStatus();
+                    await speak("Commands deactivated.");
+                    return;
+                }
+
+                if (command.includes("describe") || command.includes("what do you see")) {
+                    describeSceneButton.click();
+                } else if (command.includes("read") || command.includes("read text")) {
+                    readTextButton.click();
+                } else if (command.includes("identify") || command.includes("what is this")) {
+                    identifyObjectsButton.click();
+                } else if (command.startsWith("ask") || command.startsWith("question")) {
+                    const question = command.replace(/^(ask|question)\s*/, '');
+                    if (question) {
+                        questionInput.value = question;
+                        askQuestionButton.click();
+                    } else {
+                        await speak("What is your question?");
+                    }
+                } else {
+                    console.log("Unrecognized active command:", command);
+                }
+            }
+        }
+
+        // --- AI Interaction ---
+
+        async function callGeminiVision(prompt, base64ImageData) {
+            const apiKey = ""; // IMPORTANT: Paste your own Google Gemini API key here
+            const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-05-20:generateContent?key=${apiKey}`;
+            const payload = {
+                contents: [{ parts: [{ text: prompt }, { inlineData: { mimeType: "image/jpeg", data: base64ImageData.split(',')[1] } }] }],
+                generationConfig: { "temperature": 0.2, "maxOutputTokens": 1024 }
+            };
+            try {
+                const response = await fetch(apiUrl, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+                if (!response.ok) throw new Error(`API request failed with status ${response.status}`);
+                const result = await response.json();
+                if (result.candidates && result.candidates[0].content && result.candidates[0].content.parts) {
+                    return result.candidates[0].content.parts[0].text;
+                } else {
+                    return "I'm sorry, I couldn't process that image. Please try a different view.";
+                }
+            } catch (error) {
+                console.error("Error calling Gemini API:", error);
+                return "I'm having trouble connecting to my brain. Please check your internet connection.";
+            }
+        }
+
+        async function handleAnalysisRequest(prompt, loadingText) {
+            if (isProcessing || !stream) return;
+
+            // Pause listening while we process and speak
+            if (shouldBeListening) recognition.stop();
+
+            await speak(loadingText);
+            showLoading(true, loadingText);
+            const imageData = captureFrame();
+            if (!imageData) {
+                await speak("Could not capture image.");
+                showLoading(false);
+                return;
+            }
+            const description = await callGeminiVision(prompt, imageData);
+            showLoading(false);
+            await speak(description);
+
+            // Resume listening now that we're done speaking
+            if (shouldBeListening) {
+                try {
+                    recognition.start();
+                } catch(e) { console.error("Error restarting recognition post-analysis", e); }
+            }
+        }
+
+        // --- Event Listeners ---
+        toggleCameraButton.addEventListener('click', toggleCamera);
+        if (toggleVoiceButton) toggleVoiceButton.addEventListener('click', toggleListening);
+
+        describeSceneButton.addEventListener('click', () => handleAnalysisRequest("Describe this scene in a helpful and detailed way for a visually impaired person. Focus on the most important objects, their layout, and any potential obstacles.", "Describing the scene..."));
+        readTextButton.addEventListener('click', () => handleAnalysisRequest("Read all the text in this image, starting from the top. If there is no text, say 'No text found'.", "Looking for text..."));
+        identifyObjectsButton.addEventListener('click', () => handleAnalysisRequest("List the main objects you can identify in this image.", "Identifying objects..."));
+        
+        askQuestionButton.addEventListener('click', () => {
+            const question = questionInput.value.trim();
+            if (!question) {
+                speak("Please type or say a question first.");
+                return;
+            }
+            handleAnalysisRequest(question, "Thinking about your question...");
+            questionInput.value = '';
+        });
+        
+        questionInput.addEventListener('keyup', (event) => {
+            if (event.key === 'Enter') {
+                event.preventDefault();
+                askQuestionButton.click();
+            }
+        });
+
+        // Initial setup
+        enableControls(false);
+        video.style.display = 'none';
+        welcomeOverlay.classList.remove('hidden');
+        welcomeOverlay.classList.add('flex');
+        updateVoiceStatus();
+    </script>
+</body>
+</html>
